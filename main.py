@@ -1,5 +1,9 @@
 from queue import PriorityQueue
 import math
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib import animation
+import numpy as np
 
 DIRECTIONS = {
     'UP': (-1, 0),
@@ -30,49 +34,99 @@ def get_neighbors(grid, current):
     return neighbors
 
 def astar(grid, start, goal):
-    """A* pathfinding algorithm implementation."""
-    rows, cols = len(grid), len(grid[0])
-    
-    # Priority queue to store nodes to visit
-    # Format: (f_score, current_cost, position)
     frontier = PriorityQueue()
-    frontier.put((0, 0, start))
-    
-    # Keep track of where we came from
+    frontier.put((0, 0, start))  # (f_score, g_score, position)
     came_from = {start: None}
-    
-    # Cost to reach each node
     cost_so_far = {start: 0}
-    
+    visited = set()
+
+    steps = 0
     while not frontier.empty():
-        # Get the node with lowest f_score
         _, current_cost, current = frontier.get()
-        
-        # If we reached the goal, reconstruct and return the path
+        if current in visited:
+            continue
+        visited.add(current)  # Mark node as visited
+        steps += 1
+
+        # If the goal is reached, reconstruct the path
         if current == goal:
             path = []
             while current is not None:
                 path.append(current)
                 current = came_from[current]
-            return path[::-1]
-        
-        # Check all neighbors
-        for next_pos in get_neighbors(grid, current):
-            # Movement cost is always 1 for cardinal directions
-            new_cost = cost_so_far[current] + 1
-            
-            # If we haven't visited this node or found a better path
+            yield path[::-1], visited, [], steps
+            return
+
+        neighbors = get_neighbors(grid, current)
+        current_frontier = []
+        for next_pos in neighbors:
+            new_cost = cost_so_far[current] + 1  # Assume uniform cost for moving to a neighbor
             if next_pos not in cost_so_far or new_cost < cost_so_far[next_pos]:
                 cost_so_far[next_pos] = new_cost
-                # Calculate f_score (g_score + h_score)
-                f_score = new_cost + euclidean_distance(next_pos, goal)
+                h_score = euclidean_distance(next_pos, goal)
+                f_score = new_cost + h_score
                 frontier.put((f_score, new_cost, next_pos))
+                current_frontier.append(next_pos)
                 came_from[next_pos] = current
-    
-    # No path found
-    return None
 
-# Example usage
+        # Yield the current state for visualization
+        yield [], visited, current_frontier, steps
+
+
+def visualise_grid(grid, start, goal, search_generator, title="Grid"):
+    # Define a colormap: smooth gradient from white to black
+    cmap = LinearSegmentedColormap.from_list('black_white', ['white', 'black'], N=256)
+
+    # Convert grid to a numpy array for easier manipulation
+    grid_array = np.array(grid)
+
+    # Find the maximum non-inf value in the grid
+    max_value = np.max(grid_array[grid_array != float('inf')])
+    inf_replacement = max_value + 1
+    grid_array[grid_array == float('inf')] = inf_replacement
+
+    # Normalize the grid values for the colormap
+    norm = Normalize(vmin=0, vmax=inf_replacement)
+
+    # Create a figure and axis
+    fig, ax = plt.subplots()
+    cax = ax.imshow(grid_array, cmap=cmap, norm=norm)
+
+    # Set grid lines
+    ax.set_xticks([x - 0.5 for x in range(1, len(grid[0]))], minor=True)
+    ax.set_yticks([y - 0.5 for y in range(1, len(grid))], minor=True)
+    ax.grid(which='minor', color='gray', linestyle='-', linewidth=0.5)
+    ax.tick_params(which='minor', size=0)
+
+    def update(frame):
+        path, visited, frontier, steps = frame
+        ax.clear()
+        ax.imshow(grid_array, cmap=cmap, norm=norm)
+        ax.set_xticks([x - 0.5 for x in range(1, len(grid[0]))], minor=True)
+        ax.set_yticks([y - 0.5 for y in range(1, len(grid))], minor=True)
+        ax.grid(which='minor', color='gray', linestyle='-', linewidth=0.5)
+        ax.tick_params(which='minor', size=0)
+
+        # Display visited nodes
+        for position in visited:
+            ax.scatter(position[1], position[0], c='yellow')
+
+        # Display frontier nodes
+        for node in frontier:
+            ax.scatter(node[1], node[0], c='orange')
+
+        # Display path
+        for position in path:
+            ax.scatter(position[1], position[0], c='red')
+
+        ax.scatter(start[1], start[0], c='green', label='Start')
+        ax.scatter(goal[1], goal[0], c='blue', label='Goal')
+        ax.legend()
+        ax.set_title(f"{title} (Steps: {steps})")
+
+    ani = animation.FuncAnimation(fig, update, frames=search_generator, repeat=False)
+    plt.show()
+
 grid = [
     [0, 1, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0],
@@ -84,20 +138,5 @@ grid = [
 start = (0, 0)
 goal = (4, 5)
 
-# Find the path
-path = astar(grid, start, goal)
-
-# Print the path
-if path:
-    print("Path found:", path)
-    
-    # Visualize the path in the grid
-    visual_grid = [row[:] for row in grid]
-    for row, col in path:
-        visual_grid[row][col] = '*'
-    
-    # Print the grid with the path
-    for row in visual_grid:
-        print(' '.join(['*' if cell == '*' else '#' if cell == 1 else '.' for cell in row]))
-else:
-    print("No path found!")
+a_star_search = astar(grid, start, goal)
+visualise_grid(grid, start, goal, a_star_search)
