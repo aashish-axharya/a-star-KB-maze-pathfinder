@@ -1,10 +1,13 @@
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib import animation
+import numpy as np
 from dataclasses import dataclass
-from typing import List, Set, Tuple, Optional
+from typing import List, Set, Tuple, Optional, Generator
 import math
 
 @dataclass(frozen=True)
 class Predicate:
-    """Base class for FOL predicates"""
     name: str
     arguments: tuple
     
@@ -13,7 +16,6 @@ class Predicate:
 
 @dataclass
 class Rule:
-    """Represents a FOL rule with premises and conclusion"""
     premises: List[Predicate]
     conclusion: Predicate
 
@@ -124,83 +126,111 @@ class FOLMazeSolver:
         
         return new_facts
     
-    def find_path(self) -> Optional[List[Tuple[int, int]]]:
-        """Find path using FOL inference"""
-        # Apply forward chaining to derive all possible moves
-        self.forward_chain()
-        
-        # Use derived facts to construct path
-        path = [self.start]
-        current = self.start
-        visited = {self.start}
-        
-        while current != self.goal:
-            next_move = None
-            best_distance = float('inf')
+    def find_path_with_visualization(self) -> Generator:
+            """Find path using FOL inference with visualization support"""
+            self.forward_chain()
             
-            # Look for preferred moves first
-            for fact in self.knowledge_base:
-                if (fact.name == "PreferMove" and 
-                    fact.arguments[:2] == current and 
-                    fact.arguments[2:] not in visited):
-                    nx, ny = fact.arguments[2:]
-                    dist = self.calculate_distance(nx, ny, self.goal[0], self.goal[1])
-                    if dist < best_distance:
-                        best_distance = dist
-                        next_move = (nx, ny)
+            path = [self.start]
+            current = self.start
+            visited = {self.start}
+            steps = 0
             
-            # If no preferred move, look for any valid move
-            if next_move is None:
+            # Initial state
+            yield path.copy(), visited.copy(), set(), steps
+            
+            while current != self.goal:
+                next_move = None
+                best_distance = float('inf')
+                frontier = set()
+                
+                # Look for preferred moves first
                 for fact in self.knowledge_base:
-                    if (fact.name == "CanMove" and 
+                    if (fact.name == "PreferMove" and 
                         fact.arguments[:2] == current and 
                         fact.arguments[2:] not in visited):
                         nx, ny = fact.arguments[2:]
+                        frontier.add((nx, ny))
                         dist = self.calculate_distance(nx, ny, self.goal[0], self.goal[1])
                         if dist < best_distance:
                             best_distance = dist
                             next_move = (nx, ny)
-            
-            if next_move is None:
-                return None  # No path found
-            
-            current = next_move
-            path.append(current)
-            visited.add(current)
-            
-            if len(path) > self.rows * self.cols:  # Prevent infinite loops
-                return None
-        
-        return path
+                
+                # If no preferred move, look for any valid move
+                if next_move is None:
+                    for fact in self.knowledge_base:
+                        if (fact.name == "CanMove" and 
+                            fact.arguments[:2] == current and 
+                            fact.arguments[2:] not in visited):
+                            nx, ny = fact.arguments[2:]
+                            frontier.add((nx, ny))
+                            dist = self.calculate_distance(nx, ny, self.goal[0], self.goal[1])
+                            if dist < best_distance:
+                                best_distance = dist
+                                next_move = (nx, ny)
+                
+                steps += 1
+                
+                if next_move is None:
+                    yield path.copy(), visited.copy(), frontier, steps
+                    return
+                
+                current = next_move
+                path.append(current)
+                visited.add(current)
+                
+                # Yield current state for visualization
+                yield path.copy(), visited.copy(), frontier, steps
+                
+                if len(path) > self.rows * self.cols:
+                    return
 
-    def explain_reasoning(self, path: List[Tuple[int, int]]) -> List[str]:
-        """Explain the logical reasoning for the path"""
-        explanations = []
-        if not path:
-            return ["No valid path found using logical inference."]
-        
-        for i in range(len(path) - 1):
-            current, next_pos = path[i], path[i + 1]
-            
-            # Check if this was a preferred move
-            preferred = Predicate("PreferMove", (current[0], current[1], 
-                                               next_pos[0], next_pos[1]))
-            
-            if preferred in self.knowledge_base:
-                explanations.append(
-                    f"Step {i+1}: Move from {current} to {next_pos} was preferred "
-                    f"because it reduces distance to goal"
-                )
-            else:
-                explanations.append(
-                    f"Step {i+1}: Move from {current} to {next_pos} was valid "
-                    f"based on adjacency and free cell rules"
-                )
-        
-        return explanations
+def visualize_fol_maze(grid, start, goal, search_generator, title="FOL Maze Solution"):
+    # Define a colormap: smooth gradient from white to black
+    cmap = LinearSegmentedColormap.from_list('black_white', ['white', 'black'], N=256)
+
+    # Convert grid to a numpy array for easier manipulation
+    grid_array = np.array(grid)
+
+    # Create a figure and axis
+    fig, ax = plt.subplots()
+    cax = ax.imshow(grid_array, cmap=cmap)
+
+    # Set grid lines
+    ax.set_xticks([x - 0.5 for x in range(1, len(grid[0]))], minor=True)
+    ax.set_yticks([y - 0.5 for y in range(1, len(grid))], minor=True)
+    ax.grid(which='minor', color='gray', linestyle='-', linewidth=0.5)
+    ax.tick_params(which='minor', size=0)
+
+    def update(frame):
+        path, visited, frontier, steps = frame
+        ax.clear()
+        ax.imshow(grid_array, cmap=cmap)
+        ax.set_xticks([x - 0.5 for x in range(1, len(grid[0]))], minor=True)
+        ax.set_yticks([y - 0.5 for y in range(1, len(grid))], minor=True)
+        ax.grid(which='minor', color='gray', linestyle='-', linewidth=0.5)
+        ax.tick_params(which='minor', size=0)
+
+        # Display visited nodes
+        for position in visited:
+            ax.scatter(position[1], position[0], c='yellow', alpha=0.5, label='Visited' if position == list(visited)[0] else "")
+
+        # Display frontier nodes
+        for node in frontier:
+            ax.scatter(node[1], node[0], c='orange', alpha=0.7, label='Frontier' if node == list(frontier)[0] else "")
+
+        # Display path
+        for position in path:
+            ax.scatter(position[1], position[0], c='red', label='Path' if position == path[0] else "")
+
+        ax.scatter(start[1], start[0], c='green', label='Start')
+        ax.scatter(goal[1], goal[0], c='blue', label='Goal')
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        ax.set_title(f"{title} (Steps: {steps})")
+
+    ani = animation.FuncAnimation(fig, update, frames=search_generator, repeat=False)
+    plt.show()
 
 if __name__ == "__main__":
-
     grid = [
         [0, 1, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
@@ -213,12 +243,5 @@ if __name__ == "__main__":
     goal = (4, 5)
     
     solver = FOLMazeSolver(grid, start, goal)
-    path = solver.find_path()
-    
-    if path:
-        print("Path found:", path)
-        print("\nReasoning:")
-        for explanation in solver.explain_reasoning(path):
-            print(explanation)
-    else:
-        print("No path found")
+    visualization_generator = solver.find_path_with_visualization()
+    visualize_fol_maze(grid, start, goal, visualization_generator)
