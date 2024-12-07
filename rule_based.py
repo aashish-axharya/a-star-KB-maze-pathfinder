@@ -1,10 +1,9 @@
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import animation
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Set, Tuple, Optional, Generator
-import math
+from typing import List, Set, Tuple, Generator
 
 @dataclass(frozen=True)
 class Predicate:
