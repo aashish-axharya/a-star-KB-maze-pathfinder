@@ -64,7 +64,6 @@ class FOLMazeSolver:
     def add_adjacency_rules(self):
         """Add rules for cell adjacency"""
         directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-        
         for x in range(self.rows):
             for y in range(self.cols):
                 for dx, dy in directions:
@@ -126,7 +125,6 @@ class FOLMazeSolver:
         return new_facts
     
     def find_path_with_visualization(self) -> Generator:
-            """Find path using FOL inference with visualization support"""
             self.forward_chain()
             
             path = [self.start]

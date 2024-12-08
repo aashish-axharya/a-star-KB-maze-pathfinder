@@ -42,7 +42,7 @@ def astar(grid, start, goal):
     steps = 0
     
     while not frontier.empty():
-        current_f, current_g, current = frontier.get()
+        _, current_g, current = frontier.get()
         
         if current in visited:
             continue
